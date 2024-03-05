@@ -7,15 +7,14 @@ import at.asitplus.attestation.data.attestationCertChain
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import kotlin.random.Random
 
-class FakeAttestationTests : FreeSpec({
+class FakeAttestationE2ETests : FreeSpec({
 
-    "Fake Attestation Test" - {
+    "Fake Attestation E2E Test" - {
         val challenge = "42".encodeToByteArray()
-        val packageName = "fa.ke.it.till.you.make.it"
-        val signatureDigest = Random.nextBytes(32)
-        val appVersion = 5
+        val packageName = "at.asitplus.attestation_client"
+        val signatureDigest = byteArrayOf(52, -71, 118, 44, 77, 108, -112, -44, -124, 49, -108, 12, 87, -67, -25, 49, 66, 88, -78, 100, 32, -17, -31, 106, -57, -9, 39, 79, 13, 51, 10, -43)
+        val appVersion = 0
         val androidVersion = 11
         val patchLevel = PatchLevel(2021, 8)
 
@@ -26,7 +25,10 @@ class FakeAttestationTests : FreeSpec({
             appVersion = appVersion,
             androidVersion = androidVersion,
             androidPatchLevel = patchLevel.asSingleInt
+
         )
+
+        attestationProof.forEachIndexed { index, x509Certificate -> println("Certificate #$index:\n ${x509Certificate}") }
 
         val checker = HardwareAttestationChecker(
             AndroidAttestationConfiguration(
@@ -39,7 +41,7 @@ class FakeAttestationTests : FreeSpec({
                 requireStrongBox = false,
                 allowBootloaderUnlock = false,
                 ignoreLeafValidity = false,
-                hardwareAttestationTrustAnchors = setOf(attestationProof.last().publicKey)
+                hardwareAttestationTrustAnchors = linkedSetOf(*DEFAULT_HARDWARE_TRUST_ANCHORS).union(setOf(attestationProof.last().publicKey))
             )
         )
 
@@ -105,7 +107,7 @@ class FakeAttestationTests : FreeSpec({
             pubKeyB64 = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEL3PdP8200NNz3h4p0bcwrPikiD5+s/qPXN/eHikTd8RnQiutcz4tqAq4NXgcmjLiEcNIOtkPTKi45ETDEoqPpA=="
         )
 
-        "should work when the fake cert is configured as trust anchor" {
+        "should work when additional fake cert is configured as trust anchor" {
             checker.verifyAttestation(
                 certificates = attestationProof,
                 expectedChallenge = challenge
@@ -113,11 +115,8 @@ class FakeAttestationTests : FreeSpec({
 
         }
 
-        "but not with a real cert from a real device" {
-
-            shouldThrow<CertificateInvalidException> {
-                checker.verifyAttestation(nokia.attestationCertChain, expectedChallenge = nokia.challenge)
-            }.reason shouldBe CertificateInvalidException.Reason.TRUST
+        "and also with a real cert from a real device" {
+            checker.verifyAttestation(nokia.attestationCertChain, expectedChallenge = nokia.challenge)
         }
 
         "and the fake attestation must not verify against the google root key" {
