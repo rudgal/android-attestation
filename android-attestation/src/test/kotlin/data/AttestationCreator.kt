@@ -1,14 +1,6 @@
 package at.asitplus.attestation.data
 
-import org.bouncycastle.asn1.ASN1Boolean
-import org.bouncycastle.asn1.ASN1Enumerated
-import org.bouncycastle.asn1.ASN1Integer
-import org.bouncycastle.asn1.ASN1ObjectIdentifier
-import org.bouncycastle.asn1.ASN1Sequence
-import org.bouncycastle.asn1.DEROctetString
-import org.bouncycastle.asn1.DERSequence
-import org.bouncycastle.asn1.DERSet
-import org.bouncycastle.asn1.DERTaggedObject
+import org.bouncycastle.asn1.*
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
 import org.bouncycastle.cert.X509CertificateHolder
@@ -21,7 +13,7 @@ import java.security.KeyPairGenerator
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.time.Instant
-import java.util.Date
+import java.util.*
 import kotlin.random.Random
 
 object AttestationCreator {
@@ -36,6 +28,7 @@ object AttestationCreator {
         appVersion: Int = 1,
         androidVersion: Int = 11,
         androidPatchLevel: Int = 202108,
+        rootKeyPair: KeyPair = KeyPairGenerator.getInstance("EC").also {it.initialize(256) }.genKeyPair(),
         verifiedBootKey: ByteArray = Random.nextBytes(32),
         verifiedBootHash: ByteArray = Random.nextBytes(32),
     ): List<X509Certificate> = create(
@@ -65,13 +58,11 @@ object AttestationCreator {
                 androidVersion = androidVersion,
                 androidPatchLevel = androidPatchLevel,
             )
-        )
+        ),
+        rootKeyPair
     )
 
-    private fun create(keyAttestation: KeyAttestationDefs): List<X509Certificate> {
-        val rootKeyPair = KeyPairGenerator.getInstance("EC").also {
-            it.initialize(256)
-        }.genKeyPair()
+    private fun create(keyAttestation: KeyAttestationDefs, rootKeyPair: KeyPair): List<X509Certificate> {
         val rootCert = X509v3CertificateBuilder(
             /* issuer = */ X500Name("CN=Root"),
             /* serial = */ BigInteger.valueOf(Random.nextLong()),

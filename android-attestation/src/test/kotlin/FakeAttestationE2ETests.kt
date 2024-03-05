@@ -7,6 +7,11 @@ import at.asitplus.attestation.data.attestationCertChain
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.spec.PKCS8EncodedKeySpec
+import java.security.spec.X509EncodedKeySpec
+import java.util.*
 
 class FakeAttestationE2ETests : FreeSpec({
 
@@ -18,17 +23,23 @@ class FakeAttestationE2ETests : FreeSpec({
         val androidVersion = 11
         val patchLevel = PatchLevel(2021, 8)
 
+        // configure e2ePubKey as server side validation trust anchor
+        // configure e2eKeyPair on client side as base for fake root cert in order to create fake attestations
+        val e2ePrivKey = "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCCNHctt9P/fsqp9ePFldx+Ec8apGttfDdW/yHD+Fnbx6Q=="
+        val e2ePubKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbLaNoi43hlYRXAqwDZMY8/C1ZvMbDlU1iXg5KyvIF4CNgK5fQXXEVL13YTnh5cMqMUNoL2HIquJ/7hhFp8jQyA=="
+        val e2eKeyPair = recreateEcKeyPair(e2ePubKey, e2ePrivKey)
+
         val attestationProof = AttestationCreator.createAttestation(
             challenge = challenge,
             packageName = packageName,
             signatureDigest = signatureDigest,
             appVersion = appVersion,
             androidVersion = androidVersion,
-            androidPatchLevel = patchLevel.asSingleInt
-
+            androidPatchLevel = patchLevel.asSingleInt,
+            rootKeyPair = e2eKeyPair
         )
 
-        attestationProof.forEachIndexed { index, x509Certificate -> println("Certificate #$index:\n ${x509Certificate}") }
+//        attestationProof.forEachIndexed { index, x509Certificate -> println("Certificate #$index:\n ${x509Certificate}") }
 
         val checker = HardwareAttestationChecker(
             AndroidAttestationConfiguration(
@@ -41,7 +52,7 @@ class FakeAttestationE2ETests : FreeSpec({
                 requireStrongBox = false,
                 allowBootloaderUnlock = false,
                 ignoreLeafValidity = false,
-                hardwareAttestationTrustAnchors = linkedSetOf(*DEFAULT_HARDWARE_TRUST_ANCHORS).union(setOf(attestationProof.last().publicKey))
+                hardwareAttestationTrustAnchors = linkedSetOf(*DEFAULT_HARDWARE_TRUST_ANCHORS).union(setOf(e2eKeyPair.public))
             )
         )
 
@@ -148,3 +159,13 @@ class FakeAttestationE2ETests : FreeSpec({
     }
 
 })
+
+private fun recreateEcKeyPair(e2ePubKey: String, e2ePrivKey: String): KeyPair {
+    val decodedPublicKey = Base64.getDecoder().decode(e2ePubKey)
+    val keyFactory = KeyFactory.getInstance("EC")
+    val publicKey = keyFactory.generatePublic(X509EncodedKeySpec(decodedPublicKey))
+    val decodedPrivateKey = Base64.getDecoder().decode(e2ePrivKey)
+    val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(decodedPrivateKey))
+    val e2eKeyPair = KeyPair(publicKey, privateKey)
+    return e2eKeyPair
+}
